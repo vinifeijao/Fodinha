@@ -121,13 +121,14 @@ def simular_rodada(jogadores, n_cartas, vidas, dealer_idx):
     return True
 
 class FodinhaGame:
-    def __init__(self, num_players=4, initial_lives=3):
-        self.jogadores = list(range(1, num_players + 1))
+    def __init__(self, player_ids, initial_lives=3):
+        self.jogadores = player_ids # Use the provided player IDs
         self.vidas = {j: initial_lives for j in self.jogadores}
-        self.dealer_idx = random.randint(0, num_players - 1)
+        self.dealer_idx = random.randint(0, len(self.jogadores) - 1)
         self.cartas = 1
         self.crescendo = True
-        self.max_cartas = len(VALORES) * len(NAIPES) // num_players
+        # Adjust max_cartas calculation based on the actual number of players
+        self.max_cartas = len(VALORES) * len(NAIPES) // len(self.jogadores) if self.jogadores else 0
         self.game_over = False
 
     def next_round(self):
@@ -163,7 +164,7 @@ class FodinhaGame:
 
 if __name__ == "__main__":
     # Example usage
-    game = FodinhaGame()
+    game = FodinhaGame([1, 2, 3, 4])
     while game.next_round():
         print("\nGame state:", game.get_game_state())
 

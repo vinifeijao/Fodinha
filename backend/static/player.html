@@ -4,47 +4,211 @@
   <title>Fodinha – Browser Client</title>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <style>
-    body{font-family:sans-serif;margin:20px}
-    #log{white-space:pre;font-size:14px;border:1px solid #ccc;padding:10px;height:250px;overflow-y:auto}
-    button{margin:5px}
+    body { font-family: sans-serif; margin: 20px; display: flex; flex-direction: column; align-items: center;background-color: #ffeb3b;}
+    .view { display: none; /* Hidden by default */ width: 80%; max-width: 600px; margin-top: 20px; padding: 15px; border: 1px solid #ccc; border-radius: 8px; }
+    .view.active { display: block; } /* Shown when active */
+    #log { white-space: pre-wrap; font-size: 14px; border: 1px solid #eee; padding: 10px; height: 250px; overflow-y: auto; margin-top: 10px; background-color: #f9f9f9; }
+    button { margin: 5px; padding: 8px 12px; cursor: pointer; }
+    input[type="text"] { padding: 8px; margin: 5px 0; }
+    h2, h3, h4 { text-align: center; }
+    .player-list li { list-style-type: none; padding: 3px 0; }
+    .info-bar { margin-bottom: 10px; font-weight: bold; }
   </style>
 </head>
 <body>
-  <h2>Fodinha Browser Client</h2>
 
-  <!-- Simple controls -->
-  <label>Player ID: <input id="pid" placeholder="P2" value=""></label>
-  <button id="join">Join Lobby</button>
-  <button id="start">Start Game (host)</button>
-  <button id="next">Next Round (host)</button>
+  <h2>Fodinha Online</h2>
 
-  <h4>Event log:</h4>
-  <div id="log"></div>
+  <!-- View 1: Login / Join Selection -->
+  <div id="loginView" class="view active">
+    <h3>Welcome!</h3>
+    <label>Your Player ID: <input id="playerIdInput" placeholder="e.g., Player1" value=""></label>
+    <hr>
+    <button id="hostGameBtn">Host New Game</button>
+    <hr>
+    <label>Enter Lobby Code: <input id="lobbyCodeInput" placeholder="e.g., ABC123" value=""></label>
+    <button id="joinGameBtn">Join Game by Code</button>
+  </div>
+
+  <!-- View 2: Lobby Waiting Room -->
+  <div id="lobbyView" class="view">
+    <h3>Lobby <span id="lobbyIdDisplay"></span></h3>
+    <div class="info-bar">Your ID: <span id="playerInLobbyDisplay"></span></div>
+    <h4>Players in Lobby:</h4>
+    <ul id="playerList" class="player-list"></ul>
+    <button id="startGameBtn" style="display:none;">Start Game</button> <!-- Hidden by default, shown for host -->
+  </div>
+
+  <!-- View 3: Game In Progress (Event Log) -->
+  <div id="gameView" class="view">
+    <h3>Game in Progress - Lobby <span id="gameLobbyIdDisplay"></span></h3>
+    <div class="info-bar">Your ID: <span id="playerInGameDisplay"></span> | Current Room: <span id="roomInGameDisplay"></span></div>
+    <button id="nextRoundBtn" style="display:none;">Next Round</button> <!-- Hidden by default, shown for host -->
+    <h4>Event Log:</h4>
+    <div id="log"></div>
+  </div>
 
 <script>
-const log = msg => { document.getElementById('log').textContent += msg + '\n'; };
+  const logElement = document.getElementById('log');
+  const log = (msg, type = 'info') => {
+    const prefix = type === 'error' ? '❌ ERROR: ' : (type === 'event' ? '🔹 ' : '✔ ');
+    logElement.textContent += prefix + msg + '\n';
+    logElement.scrollTop = logElement.scrollHeight; // Auto-scroll
+  };
 
-const socket = io("http://localhost:5050");      // same port your server runs on
-socket.on('connected',  d => log('✔ ' + d.msg));
-socket.on('lobby_state',d => log('🏠 lobby  ' + JSON.stringify(d)));
-socket.on('game_started',d=> log('🎮 start  ' + JSON.stringify(d)));
-socket.on('round_update',d=> log('🃏 round  ' + JSON.stringify(d)));
-socket.on('game_over',  d=> log('💀 over   ' + JSON.stringify(d)));
+  const loginView = document.getElementById('loginView');
+  const lobbyView = document.getElementById('lobbyView');
+  const gameView = document.getElementById('gameView');
 
-document.getElementById('join').onclick = () => {
-  const pid = document.getElementById('pid').value || 'P2';
-  socket.emit('join', {room_id:'default', player_id:pid});
-  log(`(you) sent join as ${pid}`);
-};
+  const playerIdInput = document.getElementById('playerIdInput');
+  const lobbyCodeInput = document.getElementById('lobbyCodeInput');
 
-document.getElementById('start').onclick = () => {
-  socket.emit('start_game', {num_players:2});
-  log('(you) asked to start game');
-};
+  const lobbyIdDisplay = document.getElementById('lobbyIdDisplay');
+  const playerInLobbyDisplay = document.getElementById('playerInLobbyDisplay');
+  const playerList = document.getElementById('playerList');
+  const startGameBtn = document.getElementById('startGameBtn');
 
-document.getElementById('next').onclick = () => {
-  socket.emit('next_round');
-};
+  const gameLobbyIdDisplay = document.getElementById('gameLobbyIdDisplay');
+  const playerInGameDisplay = document.getElementById('playerInGameDisplay');
+  const roomInGameDisplay = document.getElementById('roomInGameDisplay');
+  const nextRoundBtn = document.getElementById('nextRoundBtn');
+
+  let currentPlayerId = '';
+  let currentRoomId = '';
+  let isHost = false;
+
+  function showView(viewId) {
+    loginView.classList.remove('active');
+    lobbyView.classList.remove('active');
+    gameView.classList.remove('active');
+    document.getElementById(viewId).classList.add('active');
+  }
+
+  // Initialize Socket.IO connection
+  const socket = io("http://localhost:5050"); // Adjust if your server is elsewhere
+
+  socket.on('connected', (data) => log(data.msg, 'event'));
+  socket.on('error', (data) => log(data.msg, 'error'));
+
+  // --- Lobby Event Handlers ---
+  socket.on('lobby_created', (data) => {
+    log(`Lobby created! Code: ${data.room_id}. Players: ${data.players.join(', ')}`, 'event');
+    currentRoomId = data.room_id;
+    isHost = true;
+    lobbyIdDisplay.textContent = currentRoomId;
+    playerInLobbyDisplay.textContent = currentPlayerId;
+    updatePlayerList(data.players);
+    startGameBtn.style.display = 'block'; // Show start button for host
+    nextRoundBtn.style.display = 'block'; // Also show next round for host control
+    showView('lobbyView');
+  });
+
+  socket.on('lobby_state', (data) => {
+    log(`Lobby update for ${data.room_id}. Players: ${data.players.join(', ')}`, 'event');
+    if (data.room_id === currentRoomId) {
+      updatePlayerList(data.players);
+      playerInLobbyDisplay.textContent = currentPlayerId; // In case it wasn't set yet for joiner
+      lobbyIdDisplay.textContent = currentRoomId;
+      showView('lobbyView'); // Ensure lobby view is active if joining
+    }
+  });
+  
+  socket.on('lobby_message', (data) => { // For general messages like "Need more players"
+    log(data.msg, 'event');
+  });
+
+  function updatePlayerList(players) {
+    playerList.innerHTML = ''; // Clear existing list
+    players.forEach(pid => {
+      const li = document.createElement('li');
+      li.textContent = pid + (pid === currentPlayerId ? ' (You)' : '') + (pid === players[0] && isHost ? ' (Host)' : (pid === players[0] ? ' (Host)' : ''));
+      playerList.appendChild(li);
+    });
+  }
+
+  // --- Game Event Handlers ---
+  socket.on('game_started', (data) => {
+    log('Game started! Initial state: ' + JSON.stringify(data), 'event');
+    gameLobbyIdDisplay.textContent = currentRoomId;
+    playerInGameDisplay.textContent = currentPlayerId;
+    roomInGameDisplay.textContent = currentRoomId;
+    showView('gameView');
+    // Host controls "Next Round"
+    if (isHost) {
+        nextRoundBtn.style.display = 'block';
+    } else {
+        nextRoundBtn.style.display = 'none';
+    }
+  });
+
+  socket.on('round_update', (data) => {
+    log('Round update: ' + JSON.stringify(data), 'event');
+  });
+
+  socket.on('game_over', (data) => {
+    log('Game over! Final state: ' + JSON.stringify(data), 'event');
+    // Could transition back to lobby view or show a "Play Again" option
+    // For now, host can start a new game from lobby view if they go back or if we add a button
+    // Disable next round button as game is over
+    nextRoundBtn.style.display = 'none';
+    // Optionally, clear currentRoomId and isHost if you want to force re-joining/re-hosting
+    // showView('lobbyView'); // Or a dedicated game over screen
+    alert(`Game Over in lobby ${currentRoomId}! Check logs for details.`);
+  });
+
+
+  // --- Button Click Handlers ---
+  document.getElementById('hostGameBtn').onclick = () => {
+    currentPlayerId = playerIdInput.value.trim();
+    if (!currentPlayerId) {
+      alert('Please enter a Player ID.');
+      return;
+    }
+    log(`Attempting to host game as ${currentPlayerId}...`);
+    socket.emit('create_lobby', { player_id: currentPlayerId });
+  };
+
+  document.getElementById('joinGameBtn').onclick = () => {
+    currentPlayerId = playerIdInput.value.trim();
+    const roomIdToJoin = lobbyCodeInput.value.trim().toUpperCase();
+    if (!currentPlayerId) {
+      alert('Please enter a Player ID.');
+      return;
+    }
+    if (!roomIdToJoin) {
+      alert('Please enter a Lobby Code.');
+      return;
+    }
+    log(`Attempting to join lobby ${roomIdToJoin} as ${currentPlayerId}...`);
+    currentRoomId = roomIdToJoin; // Assume join will be successful for now for context
+    isHost = false; // Joining player is not the host
+    startGameBtn.style.display = 'none'; // Hide start button for joiner
+    nextRoundBtn.style.display = 'none'; // Hide next round for joiner
+    socket.emit('join_lobby', { room_id: roomIdToJoin, player_id: currentPlayerId });
+  };
+
+  startGameBtn.onclick = () => {
+    if (!currentRoomId) {
+      log('No current room to start game in.', 'error');
+      return;
+    }
+    log(`(Host ${currentPlayerId}) is starting game in lobby ${currentRoomId}...`);
+    socket.emit('start_game', { room_id: currentRoomId });
+  };
+
+  nextRoundBtn.onclick = () => {
+    if (!currentRoomId) {
+      log('No current room for next round.', 'error');
+      return;
+    }
+    log(`(Host ${currentPlayerId}) requesting next round for lobby ${currentRoomId}...`);
+    socket.emit('next_round', { room_id: currentRoomId });
+  };
+
+  // Initial setup
+  showView('loginView');
+  playerIdInput.value = 'P' + Math.floor(Math.random() * 100); // Random default player ID
+
 </script>
 </body>
 </html>

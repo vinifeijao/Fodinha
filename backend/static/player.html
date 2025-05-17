@@ -85,10 +85,22 @@
   }
 
   // Initialize Socket.IO connection
-  const socket = io("http://localhost:5050"); // Adjust if your server is elsewhere
+  // Get the base URL dynamically (works for both localhost and Render)
+  const socket = io(window.location.origin);
 
-  socket.on('connected', (data) => log(data.msg, 'event'));
-  socket.on('error', (data) => log(data.msg, 'error'));
+  // Add connection error handling
+  socket.on('connect_error', (error) => {
+    log('Connection error: ' + error.message, 'error');
+  });
+
+  socket.on('connect', () => {
+    log('Connected to server successfully!', 'event');
+  });
+
+  socket.on('disconnect', () => {
+    log('Disconnected from server', 'error');
+  });
+
 
   // --- Lobby Event Handlers ---
   socket.on('lobby_created', (data) => {

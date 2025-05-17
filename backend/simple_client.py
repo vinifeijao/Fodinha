@@ -1,49 +1,42 @@
-# simple_client.py
-import sys, time, socketio, random
+import sys, time, socketio
 
-ROOM   = "demo"                    # change if you like
-MY_ID  = sys.argv[1]               # pass a unique id per terminal
+PLAYER_ID = sys.argv[1]          # e.g. "P1"  or  "P2"
+ROOM_ID   = "default"            # same as server
 
 sio = socketio.Client()
+
 @sio.event
 def connect():
-    print(f"[{MY_ID}] ✅ connected");          
+    print(f"[{PLAYER_ID}] Connected")
 
-@sio.on("connected")
-def on_welcome(data):
-    print(f"[{MY_ID}] {data}")
+@sio.on("lobby_state")
+def on_lobby(state):
+    print(f"[{PLAYER_ID}] Lobby ->", state)
 
 @sio.on("game_started")
-def on_started(state):
-    print(f"[{MY_ID}] 🎮 start:", state)
+def on_start(state):
+    print(f"[{PLAYER_ID}] GAME START ->", state)
 
 @sio.on("round_update")
 def on_round(state):
-    print(f"[{MY_ID}] 🃏 round:", state)
+    print(f"[{PLAYER_ID}] ROUND ->", state)
 
 @sio.on("game_over")
-def on_over(state):
-    print(f"[{MY_ID}] 💀 game over", state)
+def on_gameover(state):
+    print(f"[{PLAYER_ID}] GAME OVER ->", state)
     sio.disconnect()
 
-@sio.event
-def disconnect():
-    print(f"[{MY_ID}] 🔌 bye!")
-
 sio.connect("http://localhost:5050")
-sio.emit("join", {"room_id": ROOM, "player_id": MY_ID})  # you’ll add this handler next
-time.sleep(1)
+sio.emit("join", {"room_id": ROOM_ID, "player_id": PLAYER_ID})
 
-# Player 1 will be the host that starts rounds
-if MY_ID == "P1":
-    num_players = 3                    # total clients you’ll launch
-    sio.emit("start_game", {"room_id": ROOM, "num_players": num_players})
+# Only PLAYER 1 will start and drive the game
+if PLAYER_ID == "P1":
+    sio.emit("start_game", {"num_players": 2})   # two-player match
     time.sleep(1)
-    for _ in range(10):                # play 10 rounds
-        sio.emit("next_round", {"room_id": ROOM})
-        time.sleep(0.5)
-    print("[P1] done sending rounds")
+    for _ in range(15):                          # play 15 rounds
+        sio.emit("next_round")
+        time.sleep(0.8)
     time.sleep(2)
     sio.disconnect()
 else:
-    sio.wait()                         # other players just listen
+    sio.wait()    # stay online and print updates

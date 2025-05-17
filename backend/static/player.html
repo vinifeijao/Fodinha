@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+  <title>Fodinha – Browser Client</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    body{font-family:sans-serif;margin:20px}
+    #log{white-space:pre;font-size:14px;border:1px solid #ccc;padding:10px;height:250px;overflow-y:auto}
+    button{margin:5px}
+  </style>
+</head>
+<body>
+  <h2>Fodinha Browser Client</h2>
+
+  <!-- Simple controls -->
+  <label>Player ID: <input id="pid" placeholder="P2" value=""></label>
+  <button id="join">Join Lobby</button>
+  <button id="start">Start Game (host)</button>
+  <button id="next">Next Round (host)</button>
+
+  <h4>Event log:</h4>
+  <div id="log"></div>
+
+<script>
+const log = msg => { document.getElementById('log').textContent += msg + '\n'; };
+
+const socket = io("http://localhost:5050");      // same port your server runs on
+socket.on('connected',  d => log('✔ ' + d.msg));
+socket.on('lobby_state',d => log('🏠 lobby  ' + JSON.stringify(d)));
+socket.on('game_started',d=> log('🎮 start  ' + JSON.stringify(d)));
+socket.on('round_update',d=> log('🃏 round  ' + JSON.stringify(d)));
+socket.on('game_over',  d=> log('💀 over   ' + JSON.stringify(d)));
+
+document.getElementById('join').onclick = () => {
+  const pid = document.getElementById('pid').value || 'P2';
+  socket.emit('join', {room_id:'default', player_id:pid});
+  log(`(you) sent join as ${pid}`);
+};
+
+document.getElementById('start').onclick = () => {
+  socket.emit('start_game', {num_players:2});
+  log('(you) asked to start game');
+};
+
+document.getElementById('next').onclick = () => {
+  socket.emit('next_round');
+};
+</script>
+</body>
+</html>

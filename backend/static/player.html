@@ -246,6 +246,35 @@
       font-weight: bold;
       border-color: #e57373;
     }
+    
+    /* New 2-column layout */
+    .game-view-container {
+      width: 100%;
+      display: flex;
+      flex-wrap: wrap;
+    }
+    
+    .left-column {
+      flex: 1;
+      min-width: 300px;
+      padding-right: 10px;
+    }
+    
+    .right-column {
+      flex: 1;
+      min-width: 300px;
+      padding-left: 10px;
+    }
+    
+    #gameView {
+      width: 95%;
+      max-width: 1200px;
+    }
+    
+    #log {
+      width: 100%;
+      margin-top: 20px;
+    }
   </style>
 </head>
 <body>
@@ -278,58 +307,91 @@
   <div id="gameView" class="view">
     <h3 style="margin-bottom: 5px;">Game Room: <span id="gameLobbyIdDisplay"></span></h3>
     
-    <!-- Lives Tracker -->
-    <div class="lives-tracker card-display">
-      <h4>Player Lives</h4>
-      <ul id="livesTrackerList" class="player-list"></ul>
-    </div>
-    
-    <div class="game-info">
-        <div><strong>Round Phase:</strong> <span id="roundPhaseDisplay"></span></div>
-        <div><strong>Dealer (Round):</strong> <span id="dealerRodadaAtualDisplay"></span></div>
-        <div><strong>Cards in Round:</strong> <span id="nCartasRodadaAtualDisplay"></span></div>
-        <div><strong>Manilha:</strong> <span id="manilhaRodadaAtualDisplay"></span> (<span id="cartaMeioRodadaAtualDisplay"></span>)</div>
-        <div><strong>Your Hand:</strong> <span id="myHandDisplay"></span></div>
+    <div class="game-view-container">
+      <!-- Left Column -->
+      <div class="left-column">
+        <!-- Lives Tracker -->
+        <div class="lives-tracker card-display">
+          <h4>Player Lives</h4>
+          <ul id="livesTrackerList" class="player-list"></ul>
+        </div>
         
-        <div id="otherPlayersCards" class="other-players-section" style="display:none;">
-            <h4>Other Players' Cards (1-Card Round)</h4>
-            <p><em>Note: In 1-card rounds, you can see others' cards but not your own (per game rules).</em></p>
-            <div class="card-display">
-                <ul id="otherPlayersCardsList" class="player-list"></ul>
+        <div class="game-info">
+            <div><strong>Round Phase:</strong> <span id="roundPhaseDisplay"></span></div>
+            <div><strong>Dealer (Round):</strong> <span id="dealerRodadaAtualDisplay"></span></div>
+            <div><strong>Cards in Round:</strong> <span id="nCartasRodadaAtualDisplay"></span></div>
+            <div><strong>Manilha:</strong> <span id="manilhaRodadaAtualDisplay"></span> (<span id="cartaMeioRodadaAtualDisplay"></span>)</div>
+            <div><strong>Your Hand:</strong> <span id="myHandDisplay"></span></div>
+            
+            <div id="otherPlayersCards" class="other-players-section" style="display:none;">
+                <h4>Other Players' Cards (1-Card Round)</h4>
+                <p><em>Note: In 1-card rounds, you can see others' cards but not your own (per game rules).</em></p>
+                <div class="card-display">
+                    <ul id="otherPlayersCardsList" class="player-list"></ul>
+                </div>
+            </div>
+            
+            <div><strong>Player Up:</strong> <span id="jogadorDaVezAcaoDisplay" style="font-weight:bold; color:blue;"></span></div>
+        </div>
+      
+        <!-- Card Play Section -->
+        <div id="cardPlaySection" style="display:none;" class="card-play-section">
+            <h4>Play a Card</h4>
+            <div id="cardSelectionArea">
+                <!-- Card options will be dynamically generated here -->
+            </div>
+        </div>
+      
+        <!-- New Card History Section -->
+        <div id="cardHistorySection" class="card-history-section" style="display:none;">
+            <h4>Cards Played This Round</h4>
+            <div id="cardHistoryContainer">
+                <table id="cardHistoryTable" class="card-history-table">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th>Cards Played</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cardHistoryTableBody">
+                        <!-- Card history will be dynamically generated here -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- High cards summary -->
+            <div id="highCardsSummary" style="margin-top: 10px;">
+                <h5>High Cards Played</h5>
+                <div id="highCardsDisplay" class="card-display"></div>
+            </div>
+        </div>
+      </div>
+      
+      <!-- Right Column -->
+      <div class="right-column">
+        <!-- New Persistent Palpite Tracker -->
+        <div id="palpiteTrackerSection" class="palpite-tracker">
+            <h4>Palpites & Progress Tracker</h4>
+            <div id="palpiteTrackerList"></div>
+            
+            <div id="trickProgressSection" class="trick-progress">
+                <div class="trick-progress-label">Tricks Played: <span id="tricksPlayedCount">0</span>/<span id="totalTricksCount">0</span></div>
+                <div class="trick-progress-bar">
+                    <div id="trickProgressFill" class="trick-progress-fill" style="width: 0%"></div>
+                </div>
             </div>
         </div>
         
-        <div><strong>Player Up:</strong> <span id="jogadorDaVezAcaoDisplay" style="font-weight:bold; color:blue;"></span></div>
-    </div>
-    
-    <!-- New Persistent Palpite Tracker -->
-    <div id="palpiteTrackerSection" class="palpite-tracker">
-        <h4>Palpites & Progress Tracker</h4>
-        <div id="palpiteTrackerList"></div>
-        
-        <div id="trickProgressSection" class="trick-progress">
-            <div class="trick-progress-label">Tricks Played: <span id="tricksPlayedCount">0</span>/<span id="totalTricksCount">0</span></div>
-            <div class="trick-progress-bar">
-                <div id="trickProgressFill" class="trick-progress-fill" style="width: 0%"></div>
+        <div id="palpiteSection" class="palpite-section" style="display:none;">
+            <h4>Palpites Feitos:</h4>
+            <ul id="palpitesFeitosList"></ul>
+            <div id="myPalpiteInputArea" style="display:none;">
+                <label>Your Palpite (0-<span id="maxPalpite"></span>): <input type="number" id="palpiteInput" min="0"></label>
+                <button id="submitPalpiteBtn">Submit Palpite</button>
+                <div id="palpiteError" class="error-msg"></div>
             </div>
         </div>
-    </div>
-    
-    <div id="palpiteSection" class="palpite-section" style="display:none;">
-        <h4>Palpites Feitos:</h4>
-        <ul id="palpitesFeitosList"></ul>
-        <div id="myPalpiteInputArea" style="display:none;">
-            <label>Your Palpite (0-<span id="maxPalpite"></span>): <input type="number" id="palpiteInput" min="0"></label>
-            <button id="submitPalpiteBtn">Submit Palpite</button>
-            <div id="palpiteError" class="error-msg"></div>
-        </div>
-    </div>
-
-    <div id="cardPlaySection" style="display:none;" class="card-play-section">
-        <h4>Play a Card</h4>
-        <div id="cardSelectionArea">
-            <!-- Card options will be dynamically generated here -->
-        </div>
+        
         <div id="currentTrickSection" style="margin-top: 15px; display: none;">
             <h4>Current Trick</h4>
             <div id="cardsInPlayDisplay" class="card-display">
@@ -338,45 +400,22 @@
             <!-- Trick winner announcement -->
             <div id="trickWinnerAnnounce" class="trick-winner-display" style="display: none;"></div>
         </div>
-    </div>
-    
-    <!-- New Card History Section -->
-    <div id="cardHistorySection" class="card-history-section" style="display:none;">
-        <h4>Cards Played This Round</h4>
-        <div id="cardHistoryContainer">
-            <table id="cardHistoryTable" class="card-history-table">
-                <thead>
-                    <tr>
-                        <th>Player</th>
-                        <th>Cards Played</th>
-                    </tr>
-                </thead>
-                <tbody id="cardHistoryTableBody">
-                    <!-- Card history will be dynamically generated here -->
-                </tbody>
-            </table>
-        </div>
         
-        <!-- High cards summary -->
-        <div id="highCardsSummary" style="margin-top: 10px;">
-            <h5>High Cards Played</h5>
-            <div id="highCardsDisplay" class="card-display"></div>
+        <div id="roundResultsSection" style="display:none;" class="round-results-section">
+            <h4>Round Results</h4>
+            <div class="card-display">
+                <div><strong>Trick Winners:</strong> <span id="trickWinnersDisplay"></span></div>
+                <h5>Lives Lost:</h5>
+                <ul id="livesLostList" class="player-list"></ul>
+            </div>
         </div>
-    </div>
-    
-    <div id="roundResultsSection" style="display:none;" class="round-results-section">
-        <h4>Round Results</h4>
-        <div class="card-display">
-            <div><strong>Trick Winners:</strong> <span id="trickWinnersDisplay"></span></div>
-            <h5>Lives Lost:</h5>
-            <ul id="livesLostList" class="player-list"></ul>
-        </div>
-    </div>
 
-    <button id="requestNextRoundBtn" style="display:none;">Request Next Round</button>
+        <button id="requestNextRoundBtn" style="display:none;">Request Next Round</button>
+      </div>
+    </div>
     
     <h4>Event Log:</h4>
-  <div id="log"></div>
+    <div id="log"></div>
   </div>
 
 <script>
@@ -1190,6 +1229,18 @@
                 // Store the played card in the game state for our history tracking
                 data.card_played = playedCardEntry[1];
                 log(`Card played by ${playerId}: ${data.card_played}`, 'action');
+                
+                // Update our card history immediately
+                if (!G_CARD_HISTORY.length && data.players) {
+                    G_CARD_HISTORY = data.players.map(pid => ({ playerId: pid, cardsPlayed: [] }));
+                }
+                
+                if (G_CARD_HISTORY.length > 0) {
+                    const playerHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === playerId);
+                    if (playerHistoryEntry && !playerHistoryEntry.cardsPlayed.includes(data.card_played)) {
+                        playerHistoryEntry.cardsPlayed.push(data.card_played);
+                    }
+                }
             }
         }
     }
@@ -1197,6 +1248,24 @@
     // If starting a new round, reset card history
     if (data.event_type === "next_round_started" || data.event_type === "game_started") {
         G_CARD_HISTORY = [];
+    }
+    
+    // Extract all cards in play for card history
+    if (data.cartas_na_mesa_rodada_atual && Array.isArray(data.cartas_na_mesa_rodada_atual)) {
+        // Make sure card history is initialized
+        if (!G_CARD_HISTORY.length && data.players) {
+            G_CARD_HISTORY = data.players.map(pid => ({ playerId: pid, cardsPlayed: [] }));
+        }
+        
+        // Add all visible cards to history
+        data.cartas_na_mesa_rodada_atual.forEach(([playerId, card]) => {
+            if (playerId && card) {
+                const playerHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === playerId);
+                if (playerHistoryEntry && !playerHistoryEntry.cardsPlayed.includes(card)) {
+                    playerHistoryEntry.cardsPlayed.push(card);
+                }
+            }
+        });
     }
     
     G_CURRENT_GAME_STATE = data; // The data IS the new game state
@@ -1352,26 +1421,57 @@
       cardHistorySection.style.display = 'block';
     }
     
-    // Initialize player card history if it doesn't exist yet
-    if (!G_CARD_HISTORY.length && G_CURRENT_GAME_STATE.players) {
-      G_CARD_HISTORY = G_CURRENT_GAME_STATE.players.map(playerId => ({
-        playerId,
-        cardsPlayed: []
-      }));
-    }
-    
-    // Check if we have a new card played to add to history
-    if (G_CURRENT_GAME_STATE.event_type === "card_played" && G_CURRENT_GAME_STATE.player_who_played) {
-      const playerWhoPlayed = G_CURRENT_GAME_STATE.player_who_played;
-      const cardPlayed = G_CURRENT_GAME_STATE.card_played;
+    // Get all cards played from the server data
+    if (G_CURRENT_GAME_STATE.all_cards_played) {
+      // If the server directly provides all_cards_played, use that data
+      G_CARD_HISTORY = G_CURRENT_GAME_STATE.all_cards_played;
+    } else {
+      // Otherwise, try to extract from the current state and trick history
       
-      if (cardPlayed) {
-        // Find the player in our history
-        const playerHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === playerWhoPlayed);
+      // Initialize player card history if it doesn't exist yet
+      if (!G_CARD_HISTORY.length && G_CURRENT_GAME_STATE.players) {
+        G_CARD_HISTORY = G_CURRENT_GAME_STATE.players.map(playerId => ({
+          playerId,
+          cardsPlayed: []
+        }));
+      }
+      
+      // Check if we have a new card played to add to history
+      if (G_CURRENT_GAME_STATE.event_type === "card_played" && G_CURRENT_GAME_STATE.player_who_played) {
+        const playerWhoPlayed = G_CURRENT_GAME_STATE.player_who_played;
+        let cardPlayed = G_CURRENT_GAME_STATE.card_played;
         
-        if (playerHistoryEntry && !playerHistoryEntry.cardsPlayed.includes(cardPlayed)) {
-          playerHistoryEntry.cardsPlayed.push(cardPlayed);
+        // Try to find the card in cartas_na_mesa_rodada_atual if not directly provided
+        if (!cardPlayed && G_CURRENT_GAME_STATE.cartas_na_mesa_rodada_atual) {
+          const cardEntry = G_CURRENT_GAME_STATE.cartas_na_mesa_rodada_atual.find(entry => 
+            entry && entry[0] === playerWhoPlayed);
+          
+          if (cardEntry && cardEntry[1]) {
+            cardPlayed = cardEntry[1];
+          }
         }
+        
+        // Add the card to history if we found it
+        if (cardPlayed) {
+          const playerHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === playerWhoPlayed);
+          
+          if (playerHistoryEntry && !playerHistoryEntry.cardsPlayed.includes(cardPlayed)) {
+            playerHistoryEntry.cardsPlayed.push(cardPlayed);
+          }
+        }
+      }
+      
+      // Check for cards in play to add any missing cards
+      if (G_CURRENT_GAME_STATE.cartas_na_mesa_rodada_atual) {
+        G_CURRENT_GAME_STATE.cartas_na_mesa_rodada_atual.forEach(([playerId, card]) => {
+          if (playerId && card) {
+            const playerHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === playerId);
+            
+            if (playerHistoryEntry && !playerHistoryEntry.cardsPlayed.includes(card)) {
+              playerHistoryEntry.cardsPlayed.push(card);
+            }
+          }
+        });
       }
     }
     
@@ -1400,7 +1500,7 @@
       // Add cards played cell
       const cardsCell = document.createElement('td');
       
-      if (entry.cardsPlayed.length === 0) {
+      if (!entry.cardsPlayed || entry.cardsPlayed.length === 0) {
         cardsCell.textContent = 'No cards played yet';
         cardsCell.style.fontStyle = 'italic';
         cardsCell.style.color = '#777';
@@ -1445,10 +1545,13 @@
     
     highCardsDisplay.innerHTML = '';
     
-    // Group all cards played
-    const allCardsPlayed = G_CARD_HISTORY.reduce((cards, entry) => {
-      return cards.concat(entry.cardsPlayed);
-    }, []);
+    // Group all cards played from the card history
+    const allCardsPlayed = [];
+    G_CARD_HISTORY.forEach(player => {
+      if (player.cardsPlayed && player.cardsPlayed.length > 0) {
+        allCardsPlayed.push(...player.cardsPlayed);
+      }
+    });
     
     if (allCardsPlayed.length === 0) {
       const noCardsMsg = document.createElement('p');
@@ -1461,7 +1564,7 @@
     
     // Define high cards (manilha, A, 2, 3)
     const manilha = G_CURRENT_GAME_STATE.manilha_rodada_atual;
-    const highCardValues = ['A', '2', '3', manilha];
+    const highCardValues = ['A', '2', '3', manilha].filter(v => v); // Filter out undefined values
     
     // Display high cards played
     const highCardsTitle = document.createElement('p');
@@ -1472,7 +1575,7 @@
     // For each high card value
     ['A', '2', '3'].forEach(value => {
       // Find cards with this value
-      const cardsOfThisValue = allCardsPlayed.filter(card => card.includes(value));
+      const cardsOfThisValue = allCardsPlayed.filter(card => card && card.includes(value));
       
       if (cardsOfThisValue.length > 0) {
         const valueRow = document.createElement('div');
@@ -1501,7 +1604,7 @@
     
     // Display manilhas played
     if (manilha) {
-      const manilhaCards = allCardsPlayed.filter(card => card.includes(manilha));
+      const manilhaCards = allCardsPlayed.filter(card => card && card.includes(manilha));
       
       if (manilhaCards.length > 0) {
         const manilhaRow = document.createElement('div');

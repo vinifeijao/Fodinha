@@ -196,6 +196,56 @@
       background-color: #4CAF50;
       transition: width 0.3s ease;
     }
+    
+    /* Card history section */
+    .card-history-section {
+      background-color: #f5f5f5;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      padding: 10px;
+      margin: 15px 0;
+    }
+    .card-history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    .card-history-table th,
+    .card-history-table td {
+      padding: 6px;
+      text-align: center;
+      border-bottom: 1px solid #ddd;
+    }
+    .card-history-table th {
+      background-color: #f0f0f0;
+      font-weight: bold;
+    }
+    .card-history-table .trick-header {
+      background-color: #e0e0e0;
+      font-weight: bold;
+    }
+    .card-history-table .trick-winner {
+      background-color: #e8f5e9;
+    }
+    .card-history-mini-card {
+      display: inline-block;
+      padding: 2px 5px;
+      margin: 2px;
+      border-radius: 3px;
+      border: 1px solid #ccc;
+      font-weight: bold;
+      background-color: white;
+    }
+    .high-value-card {
+      background-color: #fff9c4;
+      font-weight: bold;
+      border-color: #ffd54f;
+    }
+    .manilha-card {
+      background-color: #ffcdd2;
+      font-weight: bold;
+      border-color: #e57373;
+    }
   </style>
 </head>
 <body>
@@ -287,6 +337,30 @@
             </div>
             <!-- Trick winner announcement -->
             <div id="trickWinnerAnnounce" class="trick-winner-display" style="display: none;"></div>
+        </div>
+    </div>
+    
+    <!-- New Card History Section -->
+    <div id="cardHistorySection" class="card-history-section" style="display:none;">
+        <h4>Cards Played This Round</h4>
+        <div id="cardHistoryContainer">
+            <table id="cardHistoryTable" class="card-history-table">
+                <thead>
+                    <tr>
+                        <th>Player</th>
+                        <th>Cards Played</th>
+                    </tr>
+                </thead>
+                <tbody id="cardHistoryTableBody">
+                    <!-- Card history will be dynamically generated here -->
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- High cards summary -->
+        <div id="highCardsSummary" style="margin-top: 10px;">
+            <h5>High Cards Played</h5>
+            <div id="highCardsDisplay" class="card-display"></div>
         </div>
     </div>
     
@@ -390,6 +464,11 @@
   const tricksPlayedCount = document.getElementById('tricksPlayedCount');
   const totalTricksCount = document.getElementById('totalTricksCount');
   const trickProgressFill = document.getElementById('trickProgressFill');
+  
+  // Card History Elements
+  const cardHistorySection = document.getElementById('cardHistorySection');
+  const cardHistoryTableBody = document.getElementById('cardHistoryTableBody');
+  const highCardsDisplay = document.getElementById('highCardsDisplay');
 
   // Client State
   let G_SID = '';
@@ -397,6 +476,7 @@
   let G_ROOM_ID = '';
   let G_IS_HOST = false;
   let G_CURRENT_GAME_STATE = null;
+  let G_CARD_HISTORY = []; // Array to store card history for the current round
 
   // Socket Initialization
   const socket = io(window.location.origin);
@@ -577,6 +657,9 @@
         // Update palpite tracker and progress
         updatePalpiteTracker();
         updateTrickProgress();
+        
+        // Update card history
+        updateCardHistory();
         
         console.log("[DEBUG] updateGameView: Basic info set. G_PLAYER_ID for hand:", G_PLAYER_ID);
         console.log("[DEBUG] updateGameView: Maos rodada atual:", gameState.maos_rodada_atual);
@@ -929,6 +1012,18 @@
         
         cardBtn.onclick = () => {
             log(`Playing card: ${card}`, 'action');
+            
+            // Update our local card history immediately for better UX
+            // The server response will eventually update this as well
+            if (G_CARD_HISTORY.length > 0) {
+                const myHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === G_PLAYER_ID);
+                if (myHistoryEntry && !myHistoryEntry.cardsPlayed.includes(card)) {
+                    myHistoryEntry.cardsPlayed.push(card);
+                    // Update the display
+                    updateCardHistory();
+                }
+            }
+            
             socket.emit('submit_card_action', { room_id: G_ROOM_ID, card_index: index });
             // Disable all buttons after selection
             document.querySelectorAll('.card-selection-btn').forEach(btn => btn.disabled = true);
@@ -1081,6 +1176,29 @@
     log(`Game Update (Room: ${data.room_id}, Event: ${data.event_type})`, 'event');
     if (data.room_id !== G_ROOM_ID) return;
     
+    // For card_played events, extract the played card before updating game state
+    if (data.event_type === "card_played") {
+        // Find the card that was played
+        const playerId = data.player_who_played;
+        
+        // If cartas_na_mesa_rodada_atual is available, find the card by player
+        if (data.cartas_na_mesa_rodada_atual && Array.isArray(data.cartas_na_mesa_rodada_atual)) {
+            const playedCardEntry = data.cartas_na_mesa_rodada_atual.find(entry => 
+                entry && entry[0] === playerId);
+            
+            if (playedCardEntry && playedCardEntry[1]) {
+                // Store the played card in the game state for our history tracking
+                data.card_played = playedCardEntry[1];
+                log(`Card played by ${playerId}: ${data.card_played}`, 'action');
+            }
+        }
+    }
+    
+    // If starting a new round, reset card history
+    if (data.event_type === "next_round_started" || data.event_type === "game_started") {
+        G_CARD_HISTORY = [];
+    }
+    
     G_CURRENT_GAME_STATE = data; // The data IS the new game state
     
     // Make sure we're in the game view regardless of the event
@@ -1095,7 +1213,7 @@
     } else if (data.event_type === "palpite_submitted") {
         log(`Palpite by ${data.player_who_bade}: ${data.palpite_value}.`,'action');
     } else if (data.event_type === "card_played") {
-        log(`Card played by ${data.player_who_played}.`,'action');
+        // Log message is handled above where we extract the card
     } else if (data.event_type === "trick_completed") {
         const winner = data.trick_winner || 'Unknown player';
         log(`Trick completed! ${winner} won this trick.`,'event');
@@ -1160,6 +1278,10 @@
       log(`Round Results (Room: ${data.room_id}): ${JSON.stringify(data)}`, 'event');
       if (data.room_id !== G_ROOM_ID) return;
       G_CURRENT_GAME_STATE = data;
+      
+      // Reset card history for new round
+      G_CARD_HISTORY = [];
+      
       updateGameView(data);
       // Host can now enable next round button if game not over
   });
@@ -1216,6 +1338,196 @@
   showView('loginView');
   playerIdInput.value = 'P' + Math.floor(Math.random() * 100 + 1); // Random default player ID
   updatePlayerContextUI();
+
+  // Function to update the card history display
+  function updateCardHistory() {
+    if (!G_CURRENT_GAME_STATE) return;
+    
+    // Show/hide card history section based on game phase
+    if (G_CURRENT_GAME_STATE.round_phase === "waiting_palpites") {
+      // Don't show history when we're still making bets
+      cardHistorySection.style.display = 'none';
+      return;
+    } else {
+      cardHistorySection.style.display = 'block';
+    }
+    
+    // Initialize player card history if it doesn't exist yet
+    if (!G_CARD_HISTORY.length && G_CURRENT_GAME_STATE.players) {
+      G_CARD_HISTORY = G_CURRENT_GAME_STATE.players.map(playerId => ({
+        playerId,
+        cardsPlayed: []
+      }));
+    }
+    
+    // Check if we have a new card played to add to history
+    if (G_CURRENT_GAME_STATE.event_type === "card_played" && G_CURRENT_GAME_STATE.player_who_played) {
+      const playerWhoPlayed = G_CURRENT_GAME_STATE.player_who_played;
+      const cardPlayed = G_CURRENT_GAME_STATE.card_played;
+      
+      if (cardPlayed) {
+        // Find the player in our history
+        const playerHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === playerWhoPlayed);
+        
+        if (playerHistoryEntry && !playerHistoryEntry.cardsPlayed.includes(cardPlayed)) {
+          playerHistoryEntry.cardsPlayed.push(cardPlayed);
+        }
+      }
+    }
+    
+    // Update the table with current card history
+    cardHistoryTableBody.innerHTML = '';
+    
+    // Sort players to match player order in the game
+    const sortedHistory = [...G_CARD_HISTORY].sort((a, b) => {
+      const indexA = G_CURRENT_GAME_STATE.players.indexOf(a.playerId);
+      const indexB = G_CURRENT_GAME_STATE.players.indexOf(b.playerId);
+      return indexA - indexB;
+    });
+    
+    // Add rows for each player
+    sortedHistory.forEach(entry => {
+      const row = document.createElement('tr');
+      
+      // Add player name cell
+      const playerCell = document.createElement('td');
+      playerCell.textContent = entry.playerId + (entry.playerId === G_PLAYER_ID ? ' (You)' : '');
+      if (entry.playerId === G_PLAYER_ID) {
+        playerCell.style.fontWeight = 'bold';
+      }
+      row.appendChild(playerCell);
+      
+      // Add cards played cell
+      const cardsCell = document.createElement('td');
+      
+      if (entry.cardsPlayed.length === 0) {
+        cardsCell.textContent = 'No cards played yet';
+        cardsCell.style.fontStyle = 'italic';
+        cardsCell.style.color = '#777';
+      } else {
+        // For each card, create a styled card span
+        entry.cardsPlayed.forEach(card => {
+          const cardSpan = document.createElement('span');
+          cardSpan.className = 'card-history-mini-card';
+          
+          // Add red color for hearts and diamonds
+          if (card && (card.includes('♥') || card.includes('♦'))) {
+            cardSpan.style.color = 'red';
+          }
+          
+          // Highlight high-value cards (A, 2, 3 and manilha)
+          const manilha = G_CURRENT_GAME_STATE.manilha_rodada_atual;
+          const isManilha = manilha && card.includes(manilha);
+          const isHighCard = card.includes('A') || card.includes('2') || card.includes('3');
+          
+          if (isManilha) {
+            cardSpan.classList.add('manilha-card');
+          } else if (isHighCard) {
+            cardSpan.classList.add('high-value-card');
+          }
+          
+          cardSpan.textContent = card;
+          cardsCell.appendChild(cardSpan);
+        });
+      }
+      
+      row.appendChild(cardsCell);
+      cardHistoryTableBody.appendChild(row);
+    });
+    
+    // Update high cards summary
+    updateHighCardsSummary();
+  }
+  
+  // Function to update the high cards summary section
+  function updateHighCardsSummary() {
+    if (!G_CURRENT_GAME_STATE) return;
+    
+    highCardsDisplay.innerHTML = '';
+    
+    // Group all cards played
+    const allCardsPlayed = G_CARD_HISTORY.reduce((cards, entry) => {
+      return cards.concat(entry.cardsPlayed);
+    }, []);
+    
+    if (allCardsPlayed.length === 0) {
+      const noCardsMsg = document.createElement('p');
+      noCardsMsg.textContent = 'No cards played yet in this round';
+      noCardsMsg.style.fontStyle = 'italic';
+      noCardsMsg.style.color = '#777';
+      highCardsDisplay.appendChild(noCardsMsg);
+      return;
+    }
+    
+    // Define high cards (manilha, A, 2, 3)
+    const manilha = G_CURRENT_GAME_STATE.manilha_rodada_atual;
+    const highCardValues = ['A', '2', '3', manilha];
+    
+    // Display high cards played
+    const highCardsTitle = document.createElement('p');
+    highCardsTitle.textContent = 'High cards played this round:';
+    highCardsTitle.style.marginBottom = '5px';
+    highCardsDisplay.appendChild(highCardsTitle);
+    
+    // For each high card value
+    ['A', '2', '3'].forEach(value => {
+      // Find cards with this value
+      const cardsOfThisValue = allCardsPlayed.filter(card => card.includes(value));
+      
+      if (cardsOfThisValue.length > 0) {
+        const valueRow = document.createElement('div');
+        valueRow.style.margin = '5px 0';
+        
+        const valueLabel = document.createElement('span');
+        valueLabel.textContent = `${value}: `;
+        valueLabel.style.fontWeight = 'bold';
+        valueRow.appendChild(valueLabel);
+        
+        cardsOfThisValue.forEach(card => {
+          const cardSpan = document.createElement('span');
+          cardSpan.className = 'card-history-mini-card high-value-card';
+          
+          if (card && (card.includes('♥') || card.includes('♦'))) {
+            cardSpan.style.color = 'red';
+          }
+          
+          cardSpan.textContent = card;
+          valueRow.appendChild(cardSpan);
+        });
+        
+        highCardsDisplay.appendChild(valueRow);
+      }
+    });
+    
+    // Display manilhas played
+    if (manilha) {
+      const manilhaCards = allCardsPlayed.filter(card => card.includes(manilha));
+      
+      if (manilhaCards.length > 0) {
+        const manilhaRow = document.createElement('div');
+        manilhaRow.style.margin = '5px 0';
+        
+        const manilhaLabel = document.createElement('span');
+        manilhaLabel.textContent = `Manilha (${manilha}): `;
+        manilhaLabel.style.fontWeight = 'bold';
+        manilhaRow.appendChild(manilhaLabel);
+        
+        manilhaCards.forEach(card => {
+          const cardSpan = document.createElement('span');
+          cardSpan.className = 'card-history-mini-card manilha-card';
+          
+          if (card && (card.includes('♥') || card.includes('♦'))) {
+            cardSpan.style.color = 'red';
+          }
+          
+          cardSpan.textContent = card;
+          manilhaRow.appendChild(cardSpan);
+        });
+        
+        highCardsDisplay.appendChild(manilhaRow);
+      }
+    }
+  }
 
 </script>
 </body>

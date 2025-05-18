@@ -515,7 +515,7 @@
   let G_ROOM_ID = '';
   let G_IS_HOST = false;
   let G_CURRENT_GAME_STATE = null;
-  let G_CARD_HISTORY = []; // Array to store card history for the current round
+  // let G_CARD_HISTORY = []; // THIS IS NO LONGER NEEDED - Use G_CURRENT_GAME_STATE.historico_cartas_rodada
 
   // Socket Initialization
   const socket = io(window.location.origin);
@@ -708,16 +708,17 @@
                 gameState.cartas_na_mesa_rodada_atual.forEach(([playerId, card]) => {
                     if (playerId && card) {
                         // Make sure card history is initialized
-                        if (!G_CARD_HISTORY.length && gameState.players) {
-                            G_CARD_HISTORY = gameState.players.map(pid => ({ playerId: pid, cardsPlayed: [] }));
+                        if (!G_CURRENT_GAME_STATE.historico_cartas_rodada) {
+                            G_CURRENT_GAME_STATE.historico_cartas_rodada = {};
                         }
                         
-                        if (G_CARD_HISTORY.length > 0) {
-                            const playerHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === playerId);
-                            if (playerHistoryEntry && !playerHistoryEntry.cardsPlayed.includes(card)) {
-                                playerHistoryEntry.cardsPlayed.push(card);
-                                console.log(`[updateGameView] Added card ${card} for player ${playerId} to history`);
-                            }
+                        if (!G_CURRENT_GAME_STATE.historico_cartas_rodada[playerId]) {
+                            G_CURRENT_GAME_STATE.historico_cartas_rodada[playerId] = [];
+                        }
+                        
+                        if (!G_CURRENT_GAME_STATE.historico_cartas_rodada[playerId].includes(card)) {
+                            G_CURRENT_GAME_STATE.historico_cartas_rodada[playerId].push(card);
+                            console.log(`[updateGameView] Added card ${card} for player ${playerId} to history`);
                         }
                     }
                 });
@@ -1045,25 +1046,18 @@
     
     if (!cards || !cards.length) return;
     
-    // Special case for HIDDEN cards - should only happen in 1-card rounds during palpite phase
-    // In card play phase, players should see their own card even in 1-card rounds
     if (cards.length === 1 && cards[0] === "HIDDEN") {
         console.log("[DEBUG] Attempted to setup card selection for HIDDEN card");
-        // This shouldn't happen in the card_play phase after our fix,
-        // but we'll handle it just in case
         const hiddenCardSpan = document.createElement('span');
         hiddenCardSpan.className = 'card-item hidden-card';
         hiddenCardSpan.textContent = 'HIDDEN';
         cardSelectionArea.appendChild(hiddenCardSpan);
-        
-        // Add waiting message
         const waitingMsg = document.createElement('p');
         waitingMsg.textContent = 'Waiting for your card to be revealed...';
         cardSelectionArea.appendChild(waitingMsg);
         return;
     }
     
-    // Normal handling for visible cards
     cards.forEach((card, index) => {
         const cardBtn = document.createElement('button');
         cardBtn.className = 'card-selection-btn';
@@ -1078,36 +1072,16 @@
         cardBtn.onclick = () => {
             log(`Playing card: ${card}`, 'action');
             
-            // Update our local card history immediately for better UX
-            // The server response will eventually update this as well
-            if (G_CARD_HISTORY.length > 0) {
-                const myHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === G_PLAYER_ID);
-                if (myHistoryEntry && !myHistoryEntry.cardsPlayed.includes(card)) {
-                    myHistoryEntry.cardsPlayed.push(card);
-                    // Update the display
-                    updateCardHistory();
-                }
-            }
-            
             // Add the current trick to the UI immediately for better UX feedback
-            // This will be updated when the server responds, but gives immediate feedback
             if (G_CURRENT_GAME_STATE && G_CURRENT_GAME_STATE.cartas_na_mesa_rodada_atual) {
-                // Create a copy of the current cards on the table
                 const updatedCardsInPlay = [...G_CURRENT_GAME_STATE.cartas_na_mesa_rodada_atual];
-                
-                // Add the player's card to the copy
                 updatedCardsInPlay.push([G_PLAYER_ID, card]);
-                
-                // Update the display with this copy
                 updateCardsInPlayDisplay(updatedCardsInPlay);
-                
-                // Make the current trick section visible
                 currentTrickSection.style.display = 'block';
             }
             
             socket.emit('submit_card_action', { room_id: G_ROOM_ID, card_index: index });
             
-            // Disable all buttons after selection
             document.querySelectorAll('.card-selection-btn').forEach(btn => btn.disabled = true);
         };
         
@@ -1259,96 +1233,27 @@
     if (data.room_id !== G_ROOM_ID) return;
     
     // For card_played events, extract the played card before updating game state
+    // This is mostly for logging and can be simplified if history is always from server
     if (data.event_type === "card_played") {
-        // Find the card that was played
         const playerId = data.player_who_played;
         let cardPlayed = null;
-        
-        // If cartas_na_mesa_rodada_atual is available, find the card by player
         if (data.cartas_na_mesa_rodada_atual && Array.isArray(data.cartas_na_mesa_rodada_atual)) {
             const playedCardEntry = data.cartas_na_mesa_rodada_atual.find(entry => 
                 entry && entry[0] === playerId);
-            
             if (playedCardEntry && playedCardEntry[1]) {
-                // Store the played card in the game state for our history tracking
                 cardPlayed = playedCardEntry[1];
-                data.card_played = cardPlayed;
+                data.card_played = cardPlayed; // Keep for potential use, though history is king
                 log(`Card played by ${playerId}: ${cardPlayed}`, 'action');
             }
         }
-        
-        // Update card history for the played card
-        if (playerId && cardPlayed) {
-            // Make sure card history is initialized
-            if (!G_CARD_HISTORY.length && data.players) {
-                G_CARD_HISTORY = data.players.map(pid => ({ playerId: pid, cardsPlayed: [] }));
-            }
-            
-            if (G_CARD_HISTORY.length > 0) {
-                const playerHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === playerId);
-                if (playerHistoryEntry && !playerHistoryEntry.cardsPlayed.includes(cardPlayed)) {
-                    playerHistoryEntry.cardsPlayed.push(cardPlayed);
-                    console.log(`Added card ${cardPlayed} to history for player ${playerId}`);
-                }
-            }
-        }
-    }
-    
-    // If starting a new round, reset card history
-    if (data.event_type === "next_round_started" || data.event_type === "game_started") {
-        G_CARD_HISTORY = [];
-    }
-    
-    // IMPORTANT: Always extract all cards in play for card history, regardless of event type
-    if (data.cartas_na_mesa_rodada_atual && Array.isArray(data.cartas_na_mesa_rodada_atual)) {
-        // Make sure card history is initialized
-        if (!G_CARD_HISTORY.length && data.players) {
-            G_CARD_HISTORY = data.players.map(pid => ({ playerId: pid, cardsPlayed: [] }));
-        }
-        
-        // Add all visible cards to history
-        data.cartas_na_mesa_rodada_atual.forEach(([playerId, card]) => {
-            if (playerId && card) {
-                const playerHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === playerId);
-                if (playerHistoryEntry && !playerHistoryEntry.cardsPlayed.includes(card)) {
-                    playerHistoryEntry.cardsPlayed.push(card);
-                    console.log(`Added card ${card} from mesa to history for player ${playerId}`);
-                }
-            }
-        });
-    }
-    
-    // Extract trick history if available to rebuild card history
-    if (data.trick_history && Array.isArray(data.trick_history)) {
-        // Make sure card history is initialized
-        if (!G_CARD_HISTORY.length && data.players) {
-            G_CARD_HISTORY = data.players.map(pid => ({ playerId: pid, cardsPlayed: [] }));
-        }
-        
-        // Process each completed trick
-        data.trick_history.forEach(trick => {
-            if (trick && Array.isArray(trick.cards)) {
-                trick.cards.forEach(([playerId, card]) => {
-                    if (playerId && card) {
-                        const playerHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === playerId);
-                        if (playerHistoryEntry && !playerHistoryEntry.cardsPlayed.includes(card)) {
-                            playerHistoryEntry.cardsPlayed.push(card);
-                            console.log(`Added card ${card} from trick history for player ${playerId}`);
-                        }
-                    }
-                });
-            }
-        });
     }
     
     G_CURRENT_GAME_STATE = data; // The data IS the new game state
     
-    // Always call updateCardHistory to refresh the display
-    updateCardHistory();
+    // updateCardHistory(); // Called within updateGameView now
     
-    // Make sure we're in the game view regardless of the event
     showView('gameView');
-    updateGameView(data);
+    updateGameView(data); // This will call updateCardHistory with the new state
     
     // Specific log messages based on event_type if needed
     if (data.event_type === "game_started") {
@@ -1425,7 +1330,7 @@
       G_CURRENT_GAME_STATE = data;
       
       // Reset card history for new round
-      G_CARD_HISTORY = [];
+      G_CURRENT_GAME_STATE.historico_cartas_rodada = {};
       
       updateGameView(data);
       // Host can now enable next round button if game not over
@@ -1435,27 +1340,12 @@
     log(`Card Played (Room: ${data.room_id}): Player ${data.player_who_played} played a card.`, 'event');
     if (data.room_id !== G_ROOM_ID) return;
     
-    // Extract the played card if available
-    if (data.player_who_played && data.card_played) {
-      console.log(`Received card_played event: ${data.player_who_played} played ${data.card_played}`);
-      
-      // Add to card history
-      if (!G_CARD_HISTORY.length && data.players) {
-        G_CARD_HISTORY = data.players.map(pid => ({ playerId: pid, cardsPlayed: [] }));
-      }
-      
-      if (G_CARD_HISTORY.length > 0) {
-        const playerHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === data.player_who_played);
-        if (playerHistoryEntry && !playerHistoryEntry.cardsPlayed.includes(data.card_played)) {
-          playerHistoryEntry.cardsPlayed.push(data.card_played);
-          console.log(`Added card ${data.card_played} for player ${data.player_who_played} from card_played event`);
-          updateCardHistory();
-        }
-      }
-    }
+    // This event might be redundant if game_update covers it, but we can keep it for specific handling if needed.
+    // For now, we'll rely on game_update to refresh the state which includes the card history.
     
-    G_CURRENT_GAME_STATE = data;
-    updateGameView(data);
+    // G_CURRENT_GAME_STATE = data; // Potentially update, but game_update should be the main source
+    // updateGameView(data);      // This would also call updateCardHistory
+    // console.log("'card_played' event received, game state updated. History should refresh.");
   });
 
 
@@ -1513,112 +1403,54 @@
 
   // Function to update the card history display
   function updateCardHistory() {
-    if (!G_CURRENT_GAME_STATE) return;
+    if (!G_CURRENT_GAME_STATE || !G_CURRENT_GAME_STATE.players) {
+      cardHistorySection.style.display = 'none';
+      return;
+    }
     
     // Show/hide card history section based on game phase
     if (G_CURRENT_GAME_STATE.round_phase === "waiting_palpites") {
-      // Don't show history when we're still making bets
       cardHistorySection.style.display = 'none';
       return;
     } else {
       cardHistorySection.style.display = 'block';
     }
     
-    // Get all cards played from the server data
-    if (G_CURRENT_GAME_STATE.all_cards_played) {
-      // If the server directly provides all_cards_played, use that data
-      G_CARD_HISTORY = G_CURRENT_GAME_STATE.all_cards_played;
-    } else {
-      // Otherwise, try to extract from the current state and trick history
-      
-      // Initialize player card history if it doesn't exist yet
-      if (!G_CARD_HISTORY.length && G_CURRENT_GAME_STATE.players) {
-        G_CARD_HISTORY = G_CURRENT_GAME_STATE.players.map(playerId => ({
-          playerId,
-          cardsPlayed: []
-        }));
-      }
-      
-      // Check if we have a new card played to add to history
-      if (G_CURRENT_GAME_STATE.event_type === "card_played" && G_CURRENT_GAME_STATE.player_who_played) {
-        const playerWhoPlayed = G_CURRENT_GAME_STATE.player_who_played;
-        let cardPlayed = G_CURRENT_GAME_STATE.card_played;
-        
-        // Try to find the card in cartas_na_mesa_rodada_atual if not directly provided
-        if (!cardPlayed && G_CURRENT_GAME_STATE.cartas_na_mesa_rodada_atual) {
-          const cardEntry = G_CURRENT_GAME_STATE.cartas_na_mesa_rodada_atual.find(entry => 
-            entry && entry[0] === playerWhoPlayed);
-          
-          if (cardEntry && cardEntry[1]) {
-            cardPlayed = cardEntry[1];
-          }
-        }
-        
-        // Add the card to history if we found it
-        if (cardPlayed) {
-          const playerHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === playerWhoPlayed);
-          
-          if (playerHistoryEntry && !playerHistoryEntry.cardsPlayed.includes(cardPlayed)) {
-            playerHistoryEntry.cardsPlayed.push(cardPlayed);
-          }
-        }
-      }
-      
-      // Check for cards in play to add any missing cards
-      if (G_CURRENT_GAME_STATE.cartas_na_mesa_rodada_atual) {
-        G_CURRENT_GAME_STATE.cartas_na_mesa_rodada_atual.forEach(([playerId, card]) => {
-          if (playerId && card) {
-            const playerHistoryEntry = G_CARD_HISTORY.find(entry => entry.playerId === playerId);
-            
-            if (playerHistoryEntry && !playerHistoryEntry.cardsPlayed.includes(card)) {
-              playerHistoryEntry.cardsPlayed.push(card);
-            }
-          }
-        });
-      }
-    }
+    const historico_cartas = G_CURRENT_GAME_STATE.historico_cartas_rodada || {};
     
     // Update the table with current card history
     cardHistoryTableBody.innerHTML = '';
     
-    // Sort players to match player order in the game
-    const sortedHistory = [...G_CARD_HISTORY].sort((a, b) => {
-      const indexA = G_CURRENT_GAME_STATE.players.indexOf(a.playerId);
-      const indexB = G_CURRENT_GAME_STATE.players.indexOf(b.playerId);
-      return indexA - indexB;
-    });
-    
-    // Add rows for each player
-    sortedHistory.forEach(entry => {
+    // Iterate through players in the game order to maintain consistency
+    G_CURRENT_GAME_STATE.players.forEach(playerId => {
       const row = document.createElement('tr');
       
       // Add player name cell
       const playerCell = document.createElement('td');
-      playerCell.textContent = entry.playerId + (entry.playerId === G_PLAYER_ID ? ' (You)' : '');
-      if (entry.playerId === G_PLAYER_ID) {
+      playerCell.textContent = playerId + (playerId === G_PLAYER_ID ? ' (You)' : '');
+      if (playerId === G_PLAYER_ID) {
         playerCell.style.fontWeight = 'bold';
       }
       row.appendChild(playerCell);
       
       // Add cards played cell
       const cardsCell = document.createElement('td');
+      const playedCardsByPlayer = historico_cartas[playerId] || [];
       
-      if (!entry.cardsPlayed || entry.cardsPlayed.length === 0) {
+      if (!playedCardsByPlayer || playedCardsByPlayer.length === 0) {
         cardsCell.textContent = 'No cards played yet';
         cardsCell.style.fontStyle = 'italic';
         cardsCell.style.color = '#777';
       } else {
         // For each card, create a styled card span
-        entry.cardsPlayed.forEach(card => {
+        playedCardsByPlayer.forEach(card => {
           const cardSpan = document.createElement('span');
           cardSpan.className = 'card-history-mini-card';
           
-          // Add red color for hearts and diamonds
           if (card && (card.includes('♥') || card.includes('♦'))) {
             cardSpan.style.color = 'red';
           }
           
-          // Highlight high-value cards (A, 2, 3 and manilha)
           const manilha = G_CURRENT_GAME_STATE.manilha_rodada_atual;
           const isManilha = manilha && card.includes(manilha);
           const isHighCard = card.includes('A') || card.includes('2') || card.includes('3');
@@ -1638,23 +1470,23 @@
       cardHistoryTableBody.appendChild(row);
     });
     
-    // Update high cards summary
-    updateHighCardsSummary();
+    updateHighCardsSummary(); // This will also use G_CURRENT_GAME_STATE.historico_cartas_rodada
   }
   
   // Function to update the high cards summary section
   function updateHighCardsSummary() {
-    if (!G_CURRENT_GAME_STATE) return;
+    if (!G_CURRENT_GAME_STATE || !G_CURRENT_GAME_STATE.historico_cartas_rodada) return;
     
     highCardsDisplay.innerHTML = '';
+    const historico_cartas = G_CURRENT_GAME_STATE.historico_cartas_rodada;
     
-    // Group all cards played from the card history
+    // Group all cards played from the server-provided history
     const allCardsPlayed = [];
-    G_CARD_HISTORY.forEach(player => {
-      if (player.cardsPlayed && player.cardsPlayed.length > 0) {
-        allCardsPlayed.push(...player.cardsPlayed);
-      }
-    });
+    for (const playerId in historico_cartas) {
+        if (historico_cartas[playerId] && historico_cartas[playerId].length > 0) {
+            allCardsPlayed.push(...historico_cartas[playerId]);
+        }
+    }
     
     if (allCardsPlayed.length === 0) {
       const noCardsMsg = document.createElement('p');

@@ -147,6 +147,7 @@ class FodinhaGame:
         
         self.vitorias_rodada_atual = {j: 0 for j in self.jogadores}
         self.cartas_na_mesa_rodada_atual = [] # Stores (player, card) tuples for the current trick
+        self.historico_cartas_rodada = {} # Stores all cards played in the round: {player_id: [card_str, ...]}
         self.jogador_da_vez_acao = None # Player whose turn it is to play a card or make a palpite
         self.truco_multiplier = 1 # For future truco implementation
         self.rodada_atual_num_tricks = 0 # How many tricks played in current round
@@ -174,6 +175,8 @@ class FodinhaGame:
         self.vitorias_rodada_atual = {j: 0 for j in self.jogadores} # Reset trick wins for the round
         self.rodada_atual_num_tricks = 0
         self.truco_multiplier = 1
+        self.cartas_na_mesa_rodada_atual = [] # Clear table for new round
+        self.historico_cartas_rodada = {p_id: [] for p_id in self.jogadores} # Reset history for new round
 
         if self.ordem_palpites_rodada_atual:
             self.jogador_da_vez_acao = self.ordem_palpites_rodada_atual.popleft()
@@ -245,6 +248,11 @@ class FodinhaGame:
         
         # Add card to mesa_rodada_atual with player who played it
         self.cartas_na_mesa_rodada_atual.append((player_id, card_played))
+        # Add to round history
+        if player_id in self.historico_cartas_rodada:
+            self.historico_cartas_rodada[player_id].append(str(card_played))
+        else: # Should not happen if initialized correctly in start_new_round
+            self.historico_cartas_rodada[player_id] = [str(card_played)]
         
         # Determine next player
         next_player_idx = (self.jogadores.index(player_id) + 1) % len(self.jogadores)
@@ -403,6 +411,8 @@ class FodinhaGame:
             'soma_palpites_rodada_atual': self.soma_palpites_rodada_atual,
             'jogador_da_vez_acao': self.jogador_da_vez_acao, # Player whose turn it is for current action
             'vitorias_rodada_atual': self.vitorias_rodada_atual, # Trick wins in current round
+            'cartas_na_mesa_rodada_atual': [(p, str(c)) for p, c in self.cartas_na_mesa_rodada_atual], # Cards on table for current trick
+            'historico_cartas_rodada': self.historico_cartas_rodada # All cards played in the round
         }
         
     def get_player_game_state(self, player_id):

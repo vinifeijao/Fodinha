@@ -128,6 +128,74 @@
       font-weight: bold;
       margin-right: 8px;
     }
+
+    /* New styles for the persistent palpite tracker */
+    .palpite-tracker {
+      background-color: #f0f8ff;
+      border: 1px solid #add8e6;
+      border-radius: 5px;
+      padding: 10px;
+      margin: 10px 0;
+    }
+    .palpite-tracker-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .palpite-tracker-item .player-name {
+      font-weight: bold;
+    }
+    .palpite-tracker-item .palpite-value {
+      font-weight: bold;
+      background-color: #e6f7ff;
+      border-radius: 3px;
+      padding: 2px 8px;
+    }
+    .palpite-tracker-item .tricks-won {
+      color: #4CAF50;
+      font-weight: bold;
+    }
+    
+    /* Strongest card highlight */
+    .strongest-card {
+      border: 2px solid #4CAF50 !important;
+      background-color: #e8f5e9 !important;
+      box-shadow: 0 0 5px rgba(76, 175, 80, 0.5) !important;
+    }
+    
+    /* Trick winner styles */
+    .trick-winner-display {
+      margin-top: 10px;
+      font-weight: bold;
+      color: #4CAF50;
+      background-color: #e8f5e9;
+      padding: 5px;
+      border-radius: 3px;
+      text-align: center;
+    }
+    
+    /* Progress tracker for tricks/palpites */
+    .trick-progress {
+      display: flex;
+      align-items: center;
+      margin-top: 10px;
+    }
+    .trick-progress-label {
+      margin-right: 10px;
+      font-weight: bold;
+    }
+    .trick-progress-bar {
+      flex: 1;
+      height: 20px;
+      background-color: #e0e0e0;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .trick-progress-fill {
+      height: 100%;
+      background-color: #4CAF50;
+      transition: width 0.3s ease;
+    }
   </style>
 </head>
 <body>
@@ -184,6 +252,19 @@
         <div><strong>Player Up:</strong> <span id="jogadorDaVezAcaoDisplay" style="font-weight:bold; color:blue;"></span></div>
     </div>
     
+    <!-- New Persistent Palpite Tracker -->
+    <div id="palpiteTrackerSection" class="palpite-tracker">
+        <h4>Palpites & Progress Tracker</h4>
+        <div id="palpiteTrackerList"></div>
+        
+        <div id="trickProgressSection" class="trick-progress">
+            <div class="trick-progress-label">Tricks Played: <span id="tricksPlayedCount">0</span>/<span id="totalTricksCount">0</span></div>
+            <div class="trick-progress-bar">
+                <div id="trickProgressFill" class="trick-progress-fill" style="width: 0%"></div>
+            </div>
+        </div>
+    </div>
+    
     <div id="palpiteSection" class="palpite-section" style="display:none;">
         <h4>Palpites Feitos:</h4>
         <ul id="palpitesFeitosList"></ul>
@@ -204,6 +285,8 @@
             <div id="cardsInPlayDisplay" class="card-display">
                 <!-- Cards in play will be shown here -->
             </div>
+            <!-- Trick winner announcement -->
+            <div id="trickWinnerAnnounce" class="trick-winner-display" style="display: none;"></div>
         </div>
     </div>
     
@@ -219,7 +302,7 @@
     <button id="requestNextRoundBtn" style="display:none;">Request Next Round</button>
     
     <h4>Event Log:</h4>
-    <div id="log"></div>
+  <div id="log"></div>
   </div>
 
 <script>
@@ -291,6 +374,7 @@
   const cardSelectionArea = document.getElementById('cardSelectionArea');
   const currentTrickSection = document.getElementById('currentTrickSection');
   const cardsInPlayDisplay = document.getElementById('cardsInPlayDisplay');
+  const trickWinnerAnnounce = document.getElementById('trickWinnerAnnounce');
   
   // Round Results Section
   const roundResultsSection = document.getElementById('roundResultsSection');
@@ -299,6 +383,13 @@
   
   // Lives Tracker
   const livesTrackerList = document.getElementById('livesTrackerList');
+  
+  // New Palpite Tracker Elements
+  const palpiteTrackerSection = document.getElementById('palpiteTrackerSection');
+  const palpiteTrackerList = document.getElementById('palpiteTrackerList');
+  const tricksPlayedCount = document.getElementById('tricksPlayedCount');
+  const totalTricksCount = document.getElementById('totalTricksCount');
+  const trickProgressFill = document.getElementById('trickProgressFill');
 
   // Client State
   let G_SID = '';
@@ -351,11 +442,70 @@
   function updateCardsInPlayDisplay(cardsInPlay) {
     if (!cardsInPlay || cardsInPlay.length === 0) {
       currentTrickSection.style.display = 'none';
+      trickWinnerAnnounce.style.display = 'none';
       return;
     }
     
     currentTrickSection.style.display = 'block';
     cardsInPlayDisplay.innerHTML = '';
+    
+    // Find the strongest card based on the game logic
+    let strongestPlayer = null;
+    let strongestCard = null;
+    
+    // If we have a trick_winner from the game state, use that
+    if (G_CURRENT_GAME_STATE && G_CURRENT_GAME_STATE.current_trick_leader) {
+      strongestPlayer = G_CURRENT_GAME_STATE.current_trick_leader;
+    } else {
+      // Simplified logic to determine strongest card
+      // Ideally this would match server-side logic, but we'll use a simplified version
+      // For a full implementation, we'd need to know the manilha and card ordering
+      const manilha = G_CURRENT_GAME_STATE ? G_CURRENT_GAME_STATE.manilha_rodada_atual : null;
+      
+      // Card values from lowest to highest
+      const cardValues = ['4', '5', '6', '7', 'Q', 'J', 'K', 'A', '2', '3'];
+      const naipesOrder = {'♦': 0, '♠': 1, '♥': 2, '♣': 3}; // For manilha tiebreaks
+      
+      let highestScore = -1;
+      
+      for (const [playerId, card] of cardsInPlay) {
+        if (!card) continue;
+        
+        let cardValue = null;
+        let naipe = null;
+        
+        // Extract value and naipe
+        if (typeof card === 'string') {
+          // Format might be "A♥" - first char is value, second is naipe
+          cardValue = card.substring(0, card.length - 1);
+          naipe = card.substring(card.length - 1);
+        } else if (card.valor && card.naipe) {
+          // Format might be an object with value and naipe properties
+          cardValue = card.valor;
+          naipe = card.naipe;
+        } else {
+          console.warn("Unknown card format:", card);
+          continue;
+        }
+        
+        // Calculate card strength
+        let score = 0;
+        
+        // If it's a manilha, it's the strongest
+        if (manilha && cardValue === manilha) {
+          score = 1000 + (naipesOrder[naipe] || 0);
+        } else {
+          // Otherwise use regular card order
+          score = cardValues.indexOf(cardValue);
+        }
+        
+        if (score > highestScore) {
+          highestScore = score;
+          strongestPlayer = playerId;
+          strongestCard = card;
+        }
+      }
+    }
     
     cardsInPlay.forEach(([playerId, card]) => {
       const cardContainer = document.createElement('div');
@@ -377,11 +527,29 @@
       } else {
         cardSpan.classList.add('card-black');
       }
+      
+      // Highlight the strongest card
+      if (playerId === strongestPlayer) {
+        cardSpan.classList.add('strongest-card');
+      }
+      
       cardSpan.textContent = card;
       cardContainer.appendChild(cardSpan);
       
       cardsInPlayDisplay.appendChild(cardContainer);
     });
+    
+    // Show trick winner if it was just completed
+    if (G_CURRENT_GAME_STATE && G_CURRENT_GAME_STATE.last_trick_winner && 
+        G_CURRENT_GAME_STATE.event_type === 'trick_completed') {
+      trickWinnerAnnounce.textContent = `${G_CURRENT_GAME_STATE.last_trick_winner} won this trick!`;
+      trickWinnerAnnounce.style.display = 'block';
+      
+      // Update trick progress in the progress tracker
+      updateTrickProgress();
+    } else {
+      trickWinnerAnnounce.style.display = 'none';
+    }
   }
   
   function updateGameView(gameState) {
@@ -405,6 +573,10 @@
         
         // Update lives tracker
         updateLivesTracker(gameState.lives);
+        
+        // Update palpite tracker and progress
+        updatePalpiteTracker();
+        updateTrickProgress();
         
         console.log("[DEBUG] updateGameView: Basic info set. G_PLAYER_ID for hand:", G_PLAYER_ID);
         console.log("[DEBUG] updateGameView: Maos rodada atual:", gameState.maos_rodada_atual);
@@ -648,6 +820,78 @@
     });
   }
   
+  // Function to update the palpite tracker
+  function updatePalpiteTracker() {
+    if (!G_CURRENT_GAME_STATE) return;
+    
+    palpiteTrackerList.innerHTML = '';
+    
+    // Get palpites and victories from game state
+    const palpites = G_CURRENT_GAME_STATE.palpites_feitos_rodada_atual || {};
+    const vitorias = G_CURRENT_GAME_STATE.vitorias_rodada_atual || {};
+    
+    // For all players in the game
+    for (const playerId of G_CURRENT_GAME_STATE.players || []) {
+      const palpite = palpites[playerId] !== undefined ? palpites[playerId] : '?';
+      const tricksWon = vitorias[playerId] || 0;
+      
+      const trackerItem = document.createElement('div');
+      trackerItem.className = 'palpite-tracker-item';
+      
+      // Player name
+      const playerName = document.createElement('span');
+      playerName.className = 'player-name';
+      playerName.textContent = playerId + (playerId === G_PLAYER_ID ? ' (You)' : '');
+      trackerItem.appendChild(playerName);
+      
+      // Palpite value
+      const palpiteValue = document.createElement('span');
+      palpiteValue.className = 'palpite-value';
+      palpiteValue.textContent = `Bet: ${palpite}`;
+      trackerItem.appendChild(palpiteValue);
+      
+      // Tricks won
+      const tricksWonSpan = document.createElement('span');
+      tricksWonSpan.className = 'tricks-won';
+      tricksWonSpan.textContent = `Won: ${tricksWon}`;
+      // Highlight if close to their palpite
+      if (palpite !== '?' && tricksWon === palpite) {
+        tricksWonSpan.style.color = 'green';
+        tricksWonSpan.style.fontWeight = 'bold';
+      } else if (palpite !== '?' && Math.abs(tricksWon - palpite) === 1) {
+        tricksWonSpan.style.color = 'orange';
+      }
+      trackerItem.appendChild(tricksWonSpan);
+      
+      palpiteTrackerList.appendChild(trackerItem);
+    }
+  }
+  
+  // Function to update the trick progress
+  function updateTrickProgress() {
+    if (!G_CURRENT_GAME_STATE) return;
+    
+    const totalTricks = G_CURRENT_GAME_STATE.n_cartas_rodada_atual || 0;
+    const tricksPlayed = G_CURRENT_GAME_STATE.rodada_atual_num_tricks || 0;
+    
+    // Update the counter text
+    tricksPlayedCount.textContent = tricksPlayed;
+    totalTricksCount.textContent = totalTricks;
+    
+    // Update the progress bar
+    const progressPercent = totalTricks > 0 ? (tricksPlayed / totalTricks) * 100 : 0;
+    trickProgressFill.style.width = `${progressPercent}%`;
+    
+    // Change color based on progress
+    if (progressPercent > 75) {
+      trickProgressFill.style.backgroundColor = '#4CAF50'; // Green - almost done
+    } else if (progressPercent > 40) {
+      trickProgressFill.style.backgroundColor = '#2196F3'; // Blue - in progress
+    } else {
+      trickProgressFill.style.backgroundColor = '#FFC107'; // Yellow - just started
+    }
+  }
+  
   function setupCardSelectionUI(cards, isMyTurn) {
     cardSelectionArea.innerHTML = '';
     
@@ -850,6 +1094,36 @@
         log("Next round set up. Waiting for first palpite.",'action');
     } else if (data.event_type === "palpite_submitted") {
         log(`Palpite by ${data.player_who_bade}: ${data.palpite_value}.`,'action');
+    } else if (data.event_type === "card_played") {
+        log(`Card played by ${data.player_who_played}.`,'action');
+    } else if (data.event_type === "trick_completed") {
+        const winner = data.trick_winner || 'Unknown player';
+        log(`Trick completed! ${winner} won this trick.`,'event');
+        
+        // Store the last trick winner for UI display
+        data.last_trick_winner = winner;
+        
+        // Update the cards in play display to highlight the winner
+        if (data.cartas_na_mesa_rodada_atual) {
+            updateCardsInPlayDisplay(data.cartas_na_mesa_rodada_atual);
+        }
+        
+        // Update palpite tracker and progress after trick completion
+        updatePalpiteTracker();
+        updateTrickProgress();
+        
+        // Show who's winning the round so far as a popup notification
+        if (data.vitorias_rodada_atual) {
+            const leaders = Object.entries(data.vitorias_rodada_atual)
+                .filter(([_, wins]) => wins > 0)
+                .sort((a, b) => b[1] - a[1])
+                .map(([player, wins]) => `${player}: ${wins}`);
+                
+            if (leaders.length > 0) {
+                const leaderBoard = `Current leaders: ${leaders.join(', ')}`;
+                log(leaderBoard, 'info');
+            }
+        }
     } else if (data.event_type === "game_is_over_final") {
         log("GAME IS PERMANENTLY OVER. No more rounds.", 'error');
         alert("The entire game has finished! Check logs for final details.");

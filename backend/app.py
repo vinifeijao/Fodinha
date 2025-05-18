@@ -269,7 +269,7 @@ def on_disconnect():
         if not clients_in_room:
             print(f"Lobby {r_id} is empty, removing.")
             del games[r_id]
-        else:
+    else:
             # If someone disconnected, the remaining players should get an updated lobby_state.
             # This requires knowing which player_id left to remove them from games[r_id]['players'].
             # This part is deferred due to lack of SID-to-player_id mapping.

@@ -1,8 +1,0 @@
-language = "python3"
-run = "python backend/app.py"
-
-[packager]
-ignoredPackages = []
-
-[env]
-PYTHONUNBUFFERED = "1" 

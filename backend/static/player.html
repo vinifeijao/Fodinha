@@ -336,7 +336,15 @@
     const shouldShowStartButton = G_IS_HOST && data.players.length >= 1;
     console.log('[DEBUG] updateLobbyView - Should show Start Game button?', shouldShowStartButton);
     startGameBtn.style.display = shouldShowStartButton ? 'block' : 'none';
-    showView('lobbyView');
+    
+    // Don't automatically switch to lobby view when updating - only do this for initial cases
+    const currentView = document.querySelector('.view.active').id;
+    console.log('[DEBUG] Current view is:', currentView);
+    
+    // Only switch to lobby view if we're on login view or explicitly told to
+    if (currentView === 'loginView' || data.force_lobby_view) {
+        showView('lobbyView');
+    }
   }
 
   // Function to update the cards in play display
@@ -795,7 +803,11 @@
     // Correctly set G_IS_HOST only if this player is the first player (original host)
     G_IS_HOST = (data.players && data.players.length > 0 && data.players[0] === G_PLAYER_ID);
     console.log('[DEBUG] lobby_joined - G_IS_HOST set to:', G_IS_HOST, 'G_PLAYER_ID:', G_PLAYER_ID, 'data.players[0]:', data.players ? data.players[0] : 'N/A');
+    
+    // Set force_lobby_view to true to ensure view switch
+    data.force_lobby_view = true;
     updateLobbyView(data);
+    
     if (data.game_state) {
         log('Rejoined active game. Updating view.', 'event');
         updateGameView(data.game_state);
@@ -805,16 +817,15 @@
   socket.on('lobby_state', (data) => {
     log(`Lobby update for ${data.room_id}. Players: ${data.players.join(', ')}. Disconnected: ${data.disconnected_player || 'N/A'}`, 'event');
     if (data.room_id === G_ROOM_ID) {
+        // Always update the lobby view with latest players
+        updateLobbyView(data);
+        
         if(G_CURRENT_GAME_STATE && data.game_state) { // If game is active and we get new state
             updateGameView(data.game_state);
         } else if (G_CURRENT_GAME_STATE && !data.game_state && G_CURRENT_GAME_STATE.round_phase !== 'game_over') {
             // Game might have ended or reset, and we were in game view
             log('Game seems to have ended or reset. Returning to lobby view.','event');
             showView('lobbyView');
-        }
-         // Update player list in lobby view if that's the current view
-        if(document.getElementById('lobbyView').classList.contains('active')){
-            updateLobbyView(data);
         }
     }
   });
@@ -823,12 +834,16 @@
 
   // --- Game Event Handlers (New Structure) ---
   socket.on('game_update', (data) => {
-    log(`Game Update (Room: ${data.room_id}, Event: ${data.event_type}): ${JSON.stringify(data)}`, 'event');
+    log(`Game Update (Room: ${data.room_id}, Event: ${data.event_type})`, 'event');
     if (data.room_id !== G_ROOM_ID) return;
+    
     G_CURRENT_GAME_STATE = data; // The data IS the new game state
+    
+    // Make sure we're in the game view regardless of the event
+    showView('gameView');
     updateGameView(data);
     
-    // Specific log messages based on event_type if needed (already logged above)
+    // Specific log messages based on event_type if needed
     if (data.event_type === "game_started") {
         log("Game has officially started! Waiting for first palpite.",'action');
     } else if (data.event_type === "next_round_started") {
@@ -843,12 +858,13 @@
   });
 
   socket.on('game_started', (data) => {
-    log(`Game Started (Room: ${data.players ? data.players.join(', ') : 'unknown'})`, 'event');
-    if (data.players && data.players.includes(G_PLAYER_ID)) {
-      G_CURRENT_GAME_STATE = data;
-      updateGameView(data);
-      log("Game has officially started! Waiting for first palpite.", 'action');
-    }
+    log(`Game Started (Room: ${data.room_id}, Players: ${data.players ? data.players.join(', ') : 'unknown'})`, 'event');
+    
+    // Always update to game view when game_started is received
+    // Don't check if the player is in data.players, as that can cause issues
+    G_CURRENT_GAME_STATE = data;
+    updateGameView(data);
+    log("Game has officially started! Waiting for first palpite.", 'action');
   });
 
   socket.on('prompt_palpite', (data) => {
